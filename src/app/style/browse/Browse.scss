@@ -1,0 +1,37 @@
+@import "../App.scss";
+
+.browse-page {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 20px;
+    column-gap: 20px;
+}
+
+.browse-container {
+    display: flex;
+    flex-direction: row;
+    column-gap: 5%;
+}
+
+.browse-search {
+    width: 20%;
+    min-width: fit-content;
+    text-align: left;
+}
+
+.browse-container .pagination-wrapper {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.browse-title {
+    text-align: center;
+}
+
+.browse-body {
+    display: flex;
+    flex-direction: column;
+    row-gap: 1.5em;
+}
