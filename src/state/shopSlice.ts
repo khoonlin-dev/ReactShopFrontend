@@ -148,6 +148,14 @@ export const shopSlice = createSlice({
                 state.status = "waiting";
             })
             .addCase(getOrder.fulfilled, (state, action) => {
+                // TODO should it be done here or at server??
+                // Process the orders time to local time zone...
+                const { payload } = action;
+                payload.forEach((order, i, arr) => {
+                    const { dateAdded } = order;
+                    const date = new Date(dateAdded);
+                    arr[i].dateAdded = date.toLocaleString();
+                });
                 state.orders = action.payload;
                 state.status = "idle";
             })
