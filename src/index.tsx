@@ -3,6 +3,8 @@ import { Provider } from "react-redux";
 import App from "./app/App";
 import { store } from "./state/store";
 import { PureErrorBoundary } from "./utils/ErrorBoundary";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <Provider store={store}>
@@ -13,6 +15,18 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             }}
         >
             <App />
+            <ToastContainer
+                position="top-center"
+                autoClose={5000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="light"
+            />
         </PureErrorBoundary>
     </Provider>
 );

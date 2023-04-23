@@ -1,13 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { FormEvent, useState } from "react";
-import {
-    Alert,
-    Button,
-    Pagination,
-    PaginationItem,
-    PaginationLink,
-} from "reactstrap";
+import { Alert, Pagination, PaginationItem, PaginationLink } from "reactstrap";
 import { useAppDispatch, useAppSelector } from "../../../state/hooks";
 import {
     placeOrder,
@@ -18,6 +12,7 @@ import {
 import "../../style/browse/Browse.scss";
 import ProductCard from "./Product";
 import Search from "./Search";
+import { toast } from "react-toastify";
 
 // TODO improve layout, try use grid
 
@@ -62,9 +57,13 @@ export default function Browse({ disabled }: { disabled: boolean }) {
                             brandId: data.get("brand") as string,
                             modelName: data.get("model") as string,
                         })
-                    ).catch((e) => {
-                        throw e;
-                    });
+                    )
+                        .then(() => {
+                            setPageInfo({ currentPage: 0, pageSize });
+                        })
+                        .catch((e) => {
+                            throw e;
+                        });
                 }}
             />
             <div className="browse-body">
@@ -82,19 +81,39 @@ export default function Browse({ disabled }: { disabled: boolean }) {
                                         product={info}
                                         disabled={disabled || info.outOfStock}
                                         onPlaceOrder={function () {
-                                            dispatch(placeOrder(`${info.id}`))
-                                                .then((res) => {
-                                                    //@ts-expect-error wrong typings in dispatch
-                                                    if (res.error) {
-                                                        alert(
-                                                            "Failed to place order, it might be out of stock. Please refresh"
-                                                        );
-                                                    } else {
-                                                        alert("Order placed.");
+                                            toast
+                                                .promise(
+                                                    dispatch(
+                                                        placeOrder(info.id)
+                                                    ).then((response) => {
+                                                        /**
+                                                         * Redux rejection will not be caught here unless I explicitly throw it in the reducer, which is not good practice...
+                                                         *
+                                                         * Otherwise, can only access from error item in response object
+                                                         *
+                                                         * Here we must throw it to trigger error toast
+                                                         */
+                                                        //@ts-expect-error wrong type
+                                                        const { error } =
+                                                            response;
+                                                        if (error) {
+                                                            throw error;
+                                                        }
+                                                    }),
+                                                    {
+                                                        pending: "Loading",
+                                                        success:
+                                                            "Order successfully placed",
+                                                        error: "Failed to place order, please try again later",
                                                     }
-                                                })
-                                                .catch((e) => {
-                                                    throw e;
+                                                )
+                                                .catch((/*e*/) => {
+                                                    /*
+                                                     * There's two ways to handle error:
+                                                     * 1. Store it in redux and handle it using redux state (do nothing here)
+                                                     * 2. Throw it to error boundary
+                                                     */
+                                                    // throw e;
                                                 });
                                         }}
                                     />
@@ -152,7 +171,7 @@ export default function Browse({ disabled }: { disabled: boolean }) {
                 ) : (
                     <div>
                         <Alert color="secondary">
-                            Products not found. Try change the search query.
+                            Cannot find any products.
                         </Alert>
                     </div>
                 )}

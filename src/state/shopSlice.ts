@@ -1,4 +1,4 @@
-import { createSlice, PayloadAction, createAsyncThunk } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { RootState } from "./store";
 import { ShopAppState, Order, SearchQuery } from "./state";
 import APIClient from "../model/APIClient";
@@ -15,7 +15,7 @@ const initialState: ShopAppState = {
 };
 
 export const getInfo = createAsyncThunk("shop/getInfo", async () => {
-    const responses = await Promise.all([
+    const [[productBody], [searchBody]] = await Promise.all([
         APIClient.sendAsync(API + "/search/get", { responseType: "json" }),
         APIClient.sendAsync(API + "/search/get-option", {
             responseType: "json",
@@ -23,17 +23,17 @@ export const getInfo = createAsyncThunk("shop/getInfo", async () => {
     ]);
 
     return {
-        products: (responses[0] || []) as ProductInfo[],
-        searchOption: (responses[1] || {}) as SearchOptions,
+        products: (productBody || []) as ProductInfo[],
+        searchOption: (searchBody || {}) as SearchOptions,
     };
 });
 
 export const getOrder = createAsyncThunk("shop/getOrder", async () => {
-    const responses = await APIClient.sendAsync(API + "/order/get", {
+    const [body] = await APIClient.sendAsync(API + "/order/get", {
         responseType: "json",
     });
 
-    return responses as Order[];
+    return body as Order[];
 });
 
 export const searchProduct = createAsyncThunk(
@@ -43,17 +43,21 @@ export const searchProduct = createAsyncThunk(
         Object.entries(queries).forEach(([key, value]) => {
             if (value && value !== "") url.searchParams.append(key, value);
         });
-        const responses = await APIClient.sendAsync(url, {
+        const [body] = await APIClient.sendAsync(url, {
             responseType: "json",
         });
-        return responses as ProductInfo[];
+        return body as ProductInfo[];
     }
 );
 
 export const placeOrder = createAsyncThunk(
     "shop/placeOrder",
-    async (productId: string) => {
-        const responses = await APIClient.sendAsync(API + "/order/create", {
+    async (productId: number, { rejectWithValue }) => {
+        const [body, response] = await APIClient.sendAsync<{
+            outOfStock?: boolean;
+            errorId?: number;
+        }>(API + "/order/create", {
+            responseType: "json",
             requestInit: {
                 method: "POST",
                 headers: {
@@ -62,36 +66,64 @@ export const placeOrder = createAsyncThunk(
                 },
                 body: JSON.stringify({ productId }),
             },
-        }).catch((e) => {
-            throw e;
         });
-        return responses;
+        if (response.ok) {
+            return {
+                productId: productId,
+                // In the future we might only pass-back out of stock boolean when it happens
+                outOfStock: body.outOfStock || false,
+            };
+        } else if (body.outOfStock !== undefined && productId !== undefined) {
+            // Set product to 'out of stock'
+            return rejectWithValue({
+                productId: productId,
+                outOfStock: body.outOfStock,
+            });
+        } else if (body.errorId) {
+            // Remove product from list
+            return rejectWithValue({ errorId: body.errorId });
+        } else {
+            throw new Error(response.statusText);
+        }
     }
 );
 
 export const completeOrder = createAsyncThunk(
     "shop/completeOrder",
-    async (orderId: string) => {
-        const responses = await APIClient.sendAsync(API + "/order/complete", {
+    async (orderId: number, { rejectWithValue }) => {
+        const [body, response] = await APIClient.sendAsync<{
+            status?: string;
+            errorId?: number;
+        }>(API + "/order/complete", {
+            responseType: "json",
             requestInit: {
-                method: "POST",
+                method: "PUT",
                 headers: {
                     Accept: "application/json",
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ orderId }),
             },
-        })
-            .then(() =>
-                APIClient.sendAsync(API + "/order/get", {
-                    responseType: "json",
-                })
-            )
-            .catch((e) => {
-                throw e;
+        });
+        if (response.ok) {
+            if (body.status) {
+                return { orderId: orderId, status: body.status };
+            }
+            throw new Error(
+                "Response is completed but latest order status code is not returned"
+            );
+        } else if (body.status !== undefined) {
+            // Set order to whatever state it is right now
+            return rejectWithValue({
+                productId: orderId,
+                status: body.status,
             });
-        return responses as Order[];
-        //return responses as ProductInfo[];
+        } else if (body.errorId) {
+            // Remove order from list
+            return rejectWithValue({ errorId: body.errorId });
+        } else {
+            throw new Error(response.statusText);
+        }
     }
 );
 
@@ -135,20 +167,77 @@ export const shopSlice = createSlice({
             .addCase(placeOrder.pending, (state) => {
                 state.status = "waiting";
             })
-            .addCase(placeOrder.fulfilled, (state) => {
+            .addCase(placeOrder.fulfilled, (state, action) => {
+                const { outOfStock, productId } = action.payload;
+                if (outOfStock) {
+                    const product = state.products.find(
+                        (product) => product.id === productId
+                    );
+                    product && (product.outOfStock = outOfStock);
+                }
                 state.status = "idle";
             })
-            .addCase(placeOrder.rejected, (state) => {
+            .addCase(placeOrder.rejected, (state, action) => {
+                if (action.payload) {
+                    const { outOfStock, errorId, productId } =
+                        action.payload as {
+                            outOfStock?: boolean;
+                            productId?: number;
+                            errorId?: number;
+                            error?: Error;
+                        };
+                    if (outOfStock && productId !== undefined) {
+                        const product = state.products.find(
+                            (product) => product.id === productId
+                        );
+
+                        product && (product.outOfStock = outOfStock);
+                    } else if (errorId !== undefined) {
+                        const index = state.products.findIndex(
+                            (product) => product.id === errorId
+                        );
+                        index > 0 && state.products.splice(index, 1);
+                    }
+                } else {
+                    // Unhandled error (API error, network error, etc.)
+                    // Find more about the error in action.error
+                }
                 state.status = "failed";
             })
             .addCase(completeOrder.pending, (state) => {
                 state.status = "waiting";
             })
             .addCase(completeOrder.fulfilled, (state, action) => {
-                state.orders = action.payload;
+                const { status, orderId } = action.payload;
+                const order = state.orders.find(
+                    (order) => order.id === orderId
+                );
+
+                order && (order.status = status);
                 state.status = "idle";
             })
-            .addCase(completeOrder.rejected, (state) => {
+            .addCase(completeOrder.rejected, (state, action) => {
+                if (action.payload) {
+                    const { status, errorId, orderId } = action.payload as {
+                        status?: string;
+                        orderId?: number;
+                        errorId?: number;
+                    };
+                    if (status && orderId !== undefined) {
+                        const order = state.orders.find(
+                            (order) => order.id === orderId
+                        );
+                        order && (order.status = status);
+                    } else if (errorId !== undefined) {
+                        const index = state.orders.findIndex(
+                            (order) => order.id === errorId
+                        );
+                        index > 0 && state.orders.splice(index, 1);
+                    }
+                } else {
+                    // Unhandled error (API error, network error, etc.)
+                    // Find more about the error in action.error
+                }
                 state.status = "failed";
             });
     },

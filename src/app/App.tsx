@@ -7,8 +7,7 @@ import Browse from "./view/browse/Browse";
 import Order from "./view/order/Order";
 import { Nav, NavItem, NavLink, TabContent, TabPane } from "reactstrap";
 import classnames from "classnames";
-
-// <Browse disabled={false} />
+import { toast } from "react-toastify";
 
 function App() {
     const [activeTab, setActiveTab] = useState("1");
@@ -26,9 +25,40 @@ function App() {
 
     // componentDidMount
     useEffect(() => {
-        dispatch(getInfo()).catch((e) => {
-            throw e;
-        });
+        toast
+            .promise(
+                dispatch(getInfo()).then((response) => {
+                    //@ts-expect-error wrong type
+                    const { error } = response;
+                    if (error) {
+                        throw error;
+                    }
+                }),
+                {
+                    pending: "Loading",
+                    success: {
+                        type: "success",
+                        render() {
+                            return "Loaded";
+                        },
+                        autoClose: 1000,
+                    },
+                    error: {
+                        render() {
+                            return (
+                                <>
+                                    <div>Failed to load initial data,</div>
+                                    <div>Please reload.</div>
+                                </>
+                            );
+                        },
+                    },
+                }
+            )
+            .catch((e) => {
+                // Error Boundary handling layer
+                throw e;
+            });
     }, []);
 
     return (

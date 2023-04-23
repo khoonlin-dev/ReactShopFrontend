@@ -1,4 +1,4 @@
-export type APIConfig<T = unknown> = Partial<CallbackConfig> & FetchConfig;
+export type APIConfig<T = unknown> = Partial<CallbackConfig<T>> & FetchConfig;
 
 /**
  *
@@ -16,7 +16,7 @@ type FetchConfig = {
 };
 
 type CallbackConfig<T = unknown> = {
-    onReturn: (response: T) => void;
+    onReturn: (value: [data: T, response: Response]) => void;
     onError: (err: Error) => void;
 };
 
@@ -60,7 +60,7 @@ const apiStrategyStore: Record<string, ApiStrategy> = Object.create(
 function send<T>(request: URL | string, config: APIConfig<T>) {
     const { responseType, onReturn, onError, timeout, requestInit } = config;
     const init = { ...requestInit };
-    let cancelTimeout: number | NodeJS.Timeout | undefined;
+    let cancelTimeout: number | undefined;
     let abort: AbortController | undefined;
     if (timeout && timeout > 5) {
         abort = new AbortController();
@@ -72,10 +72,13 @@ function send<T>(request: URL | string, config: APIConfig<T>) {
     fetch(request, init)
         .then((response) => {
             cancelTimeout !== undefined && clearTimeout(cancelTimeout);
-            return handleResponse(response, responseType);
+            return Promise.all([
+                handleResponse<T>(response, responseType),
+                response,
+            ]);
         })
         .then((responseData) => {
-            onReturn && onReturn(responseData as T);
+            onReturn && onReturn(responseData);
         })
         .catch((error: Error) => {
             cancelTimeout !== undefined && clearTimeout(cancelTimeout);
@@ -83,35 +86,20 @@ function send<T>(request: URL | string, config: APIConfig<T>) {
         });
 }
 
-function sendAsync<T>(request: URL | string, config: APIConfig<T>) {
+function sendAsync<T>(
+    request: URL | string,
+    config: FetchConfig
+): Promise<[T, Response]> {
     return new Promise((resolve, reject) => {
-        const { responseType, timeout, requestInit } = config;
-        const init = { ...requestInit };
-        let cancelTimeout: number | NodeJS.Timeout | undefined;
-        let abort: AbortController | undefined;
-        if (timeout && timeout > 5) {
-            abort = new AbortController();
-            init.signal = abort.signal;
-            cancelTimeout = setTimeout(() => {
-                abort?.abort();
-            }, timeout);
-        }
-        fetch(request, init)
-            .then((response) => {
-                cancelTimeout !== undefined && clearTimeout(cancelTimeout);
-                return handleResponse(response, responseType);
-            })
-            .then((responseData) => {
-                resolve(responseData as T);
-            })
-            .catch((error: Error) => {
-                cancelTimeout !== undefined && clearTimeout(cancelTimeout);
-                reject(error);
-            });
+        send<T>(request, {
+            ...config,
+            onReturn: resolve,
+            onError: reject,
+        });
     });
 }
 
-function handleResponse<T>(response: Response, type?: string): Promise<T> | T {
+function handleResponse<T>(response: Response, type?: string): Promise<T> {
     switch (type) {
         case "json": {
             return response.json() as Promise<T>;
@@ -123,7 +111,7 @@ function handleResponse<T>(response: Response, type?: string): Promise<T> | T {
             return response.arrayBuffer() as Promise<T>;
         }
         default: {
-            return response as T;
+            return Promise.resolve(response as T);
         }
     }
 }

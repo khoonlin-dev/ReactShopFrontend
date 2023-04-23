@@ -1,6 +1,7 @@
 import { Alert, Button, Table } from "reactstrap";
 import { completeOrder, selectOrderInfo } from "../../../state/shopSlice";
 import { useAppDispatch, useAppSelector } from "../../../state/hooks";
+import { toast } from "react-toastify";
 
 function titleCase(str: string) {
     return str.toLowerCase().replace(/\b\w/g, (s) => s.toUpperCase());
@@ -63,25 +64,46 @@ export default function Order({ disabled }: { disabled: boolean }) {
                                                 disabled={disabled}
                                                 onClick={(e) => {
                                                     e.preventDefault();
-                                                    dispatch(
-                                                        completeOrder(
-                                                            `${order.id}`
-                                                        )
-                                                    )
-                                                        .then((res) => {
-                                                            //@ts-expect-error wrong type
-                                                            if (res.error) {
-                                                                alert(
-                                                                    "Failed to complete order. Order might have already completed, please refresh"
-                                                                );
-                                                            } else {
-                                                                alert(
-                                                                    "Order completed"
-                                                                );
+                                                    toast
+                                                        .promise(
+                                                            dispatch(
+                                                                completeOrder(
+                                                                    order.id
+                                                                )
+                                                            ).then(
+                                                                (response) => {
+                                                                    /**
+                                                                     * Redux rejection will not be caught here unless I explicitly throw it in the reducer, which is not good practice...
+                                                                     *
+                                                                     * Otherwise, can only access from error item in response object
+                                                                     *
+                                                                     * Here we must throw it to trigger error toast
+                                                                     */
+                                                                    const {
+                                                                        //@ts-expect-error wrong type
+                                                                        error,
+                                                                    } =
+                                                                        response;
+                                                                    if (error) {
+                                                                        throw error;
+                                                                    }
+                                                                }
+                                                            ),
+                                                            {
+                                                                pending:
+                                                                    "Loading",
+                                                                success:
+                                                                    "Order completed",
+                                                                error: "Failed to complete order, it might be network error or order could be already completed, please try again",
                                                             }
-                                                        })
-                                                        .catch((e) => {
-                                                            throw e;
+                                                        )
+                                                        .catch((/*e*/) => {
+                                                            /*
+                                                             * There's two ways to handle error:
+                                                             * 1. Store it in redux and handle it using redux state (do nothing here)
+                                                             * 2. Throw it to error boundary
+                                                             */
+                                                            // throw e;
                                                         });
                                                 }}
                                             >
