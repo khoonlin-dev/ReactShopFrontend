@@ -15,4 +15,4 @@ This app is built using [ReactStrap](https://reactstrap.github.io/?path=/docs/co
 4. Run yarn install and yarn build
 5. Run yarn preview. Make sure the server is running, otherwise even though the page is loaded, the "data" field will not show anything
 
-## For time purpose I will add-in the feature section in the future
+## For time purpose I will add-in the feature section in the futur
