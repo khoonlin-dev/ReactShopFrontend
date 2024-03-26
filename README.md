@@ -4,7 +4,7 @@ This app is built using [ReactStrap](https://reactstrap.github.io/?path=/docs/co
 
 ## Requirement
 
-1. node v18
+1. node v16
 2. yarn v1
 
 ## Setup
