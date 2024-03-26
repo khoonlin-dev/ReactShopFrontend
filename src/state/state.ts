@@ -8,7 +8,6 @@ export interface ProductInfo {
     imgSrc: string;
     price: string;
     outOfStock: boolean;
-    test?:string;
 }
 
 export interface SearchQuery {
